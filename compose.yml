@@ -48,13 +48,11 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
-    ports:
-      - 8080:8080
     volumes:
       - kafka-ui-data:/kafka
     networks:
       - fed-mgr-kafka-net
-      - fed-mgr-proxy
+      - fed-mgr-proxy-net
 
   opa:
     image: openpolicyagent/opa
@@ -107,8 +105,6 @@ services:
         condition: service_started
       kafka-broker:
         condition: service_healthy
-    env_file:
-      - .env
     environment:
       DB_SCHEME: mysql+pymysql
       DB_USER: fed-mgr
@@ -123,17 +119,13 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       KAFKA_TOPIC: fed-mgr-rally
       API_KEY: changeit
-    ports:
-      - 8000:80
-    volumes:
-      - ../certs:/certs:ro
+      LOCAL_ENCRYPTION: false
     networks:
       - fed-mgr-db-net
       - fed-mgr-opa-net
       - fed-mgr-kafka-net
-      - fed-mgr-vault-net
       - fed-mgr-dashboard-net
-      - fed-mgr-proxy
+      - fed-mgr-proxy-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/api/v1/health/"]
       interval: 10s
@@ -150,8 +142,6 @@ services:
         condition: service_healthy
       kafka-broker:
         condition: service_healthy
-    env_file:
-      - .env
     environment:
       FED_MGR_API_URL: http://fed-mgr/api/v1/
       X_API_KEY: changeit
@@ -176,21 +166,24 @@ services:
     depends_on:
       fed-mgr:
         condition: service_healthy
+      db:
+        condition: service_healthy
     env_file:
       - .env
     environment:
-      IAM_CLIENT_ID: 5fedd2d9-7e3e-4d65-8ccd-2e262ae57353
       IAM_DISCOVERY_URL: https://iam.cloud.infn.it/.well-known/openid-configuration
       IAM_SCOPES: openid profile email
       BETTER_AUTH_SECRET: changeit
       BETTER_AUTH_URL: https://fed-mgr.test.cloud.infn.it # Base URL of your app
       BASE_URL: https://fed-mgr.test.cloud.infn.it # Base URL of your app
       API_SERVER_URL: http://fed-mgr/api/v1
-    volumes:
-      - db-auth:/app/auth.sqlite
+      DB_USER: fed-mgr
+      DB_PASSWORD: changeit
+      DB_HOST: db
+      DB_NAME: fed_mgr
     networks:
       - fed-mgr-dashboard-net
-      - fed-mgr-proxy
+      - fed-mgr-proxy-net
 
   proxy:
     image: nginx:1.27-alpine
@@ -199,9 +192,10 @@ services:
       - 80:80
       - 443:443
     networks:
-      - fed-mgr-proxy
+      - fed-mgr-proxy-net
     # volumes:
     #   - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    #   - ./certs:/etc/certs:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -214,6 +208,7 @@ networks:
   fed-mgr-opa-net:
   fed-mgr-kafka-net:
   fed-mgr-dashboard-net:
+  fed-mgr-proxy-net:
 
 volumes:
   db-data:
