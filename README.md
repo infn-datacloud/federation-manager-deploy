@@ -1,2 +1,3 @@
 # federation-manager-deploy
-Repowitory with docker compose and kubernetes examples
+
+Repository with docker compose and kubernetes examples

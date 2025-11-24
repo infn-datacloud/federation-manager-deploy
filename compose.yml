@@ -1,0 +1,225 @@
+services:
+  kafka-broker:
+    image: confluentinc/cp-kafka:8.1.0
+    hostname: kafka
+    container_name: kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_KRAFT_MODE: "true" # This enables KRaft mode in Kafka
+      KAFKA_PROCESS_ROLES: broker,controller # Kafka acts as both broker and controller.
+      KAFKA_NODE_ID: 1 # A unique ID for this Kafka instance.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093 # Defines the controller voters.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:19092
+      KAFKA_LOG_DIRS: /var/lib/kafka/data  # Where Kafka stores its logs.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"  # Kafka will automatically create topics if needed.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1  # Since we’re running one broker, one replica is enough.
+      KAFKA_LOG_RETENTION_HOURS: 168  # Keep logs for 7 days.
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0  # No delay for consumer rebalancing.
+      CLUSTER_ID: "Mk3OEYBSD34fcwNTJENDM2Qk"  # A unique ID for the Kafka cluster.
+    volumes:
+      - kafka-broker-data:/var/lib/kafka/data
+    networks:
+      - fed-mgr-kafka-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "kafka-topics",
+          "--bootstrap-server",
+          "localhost:9092",
+          "--list",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka-broker:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+    ports:
+      - 8080:8080
+    volumes:
+      - kafka-ui-data:/kafka
+    networks:
+      - fed-mgr-kafka-net
+      - fed-mgr-proxy
+
+  opa:
+    image: openpolicyagent/opa
+    container_name: fed-mgr-opa
+    restart: unless-stopped
+    command: run --server --log-level debug --addr 0.0.0.0:8181 /fed_mgr
+    volumes:
+      - ./opa-data:/fed_mgr:ro
+    networks:
+      - fed-mgr-opa-net
+
+  db:
+    image: mysql:8
+    container_name: fed-mgr-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: changeit
+      MYSQL_DATABASE: fed_mgr
+      MYSQL_USER: fed-mgr
+      MYSQL_PASSWORD: changeit
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - fed-mgr-db-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-uroot",
+          "-p${MYSQL_ROOT_PASSWORD}",
+          "--silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  fed-mgr:
+    image: harbor.cloud.infn.it/datacloud-middleware/fed-mgr:python3.12
+    container_name: fed-mgr
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      opa:
+        condition: service_started
+      kafka-broker:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_SCHEME: mysql+pymysql
+      DB_USER: fed-mgr
+      DB_PASSWORD: changeit
+      DB_HOST: db
+      DB_NAME: fed_mgr
+      AUTHN_MODE: local
+      AUTHZ_MODE: opa
+      TRUSTED_IDP_LIST: '["https://iam.cloud.infn.it/"]'
+      OPA_AUTHZ_URL: http://opa:8181/v1/data/fed_mgr
+      KAFKA_ENABLE: true
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_TOPIC: fed-mgr-rally
+      API_KEY: changeit
+    ports:
+      - 8000:80
+    volumes:
+      - ../certs:/certs:ro
+    networks:
+      - fed-mgr-db-net
+      - fed-mgr-opa-net
+      - fed-mgr-kafka-net
+      - fed-mgr-vault-net
+      - fed-mgr-dashboard-net
+      - fed-mgr-proxy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/v1/health/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  fed-mgr-rally:
+    image: harbor.cloud.infn.it/datacloud-middleware/fed-mgr-rally:python3.13
+    container_name: fed-mgr-rally
+    restart: unless-stopped
+    depends_on:
+      fed-mgr:
+        condition: service_healthy
+      kafka-broker:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FED_MGR_API_URL: http://fed-mgr/api/v1/
+      X_API_KEY: changeit
+      KAFKA_ENABLE: true
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_TOPIC: fed-mgr-rally
+      RALLY_ENV_FOLDER: /app/environments
+      RALLY_ARGS_FOLDER: /app/args
+      RALLY_REPORT_FOLDER: /app/reports
+    command: sleep infinity
+    volumes:
+      - rally-environments:/app/environments
+      - rally-args:/app/args
+      - rally-reports:/app/reports
+    networks:
+      - fed-mgr-kafka-net
+
+  fed-mgr-dashboard:
+    image: harbor.cloud.infn.it/datacloud-middleware/fed-mgr-dashboard
+    container_name: fed-mgr-frontend
+    restart: unless-stopped
+    depends_on:
+      fed-mgr:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      IAM_CLIENT_ID: 5fedd2d9-7e3e-4d65-8ccd-2e262ae57353
+      IAM_DISCOVERY_URL: https://iam.cloud.infn.it/.well-known/openid-configuration
+      IAM_SCOPES: openid profile email
+      BETTER_AUTH_SECRET: changeit
+      BETTER_AUTH_URL: https://fed-mgr.test.cloud.infn.it # Base URL of your app
+      BASE_URL: https://fed-mgr.test.cloud.infn.it # Base URL of your app
+      API_SERVER_URL: http://fed-mgr/api/v1
+    volumes:
+      - db-auth:/app/auth.sqlite
+    networks:
+      - fed-mgr-dashboard-net
+      - fed-mgr-proxy
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: fed-mgr-proxy
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - fed-mgr-proxy
+    # volumes:
+    #   - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  fed-mgr-db-net:
+  fed-mgr-opa-net:
+  fed-mgr-kafka-net:
+  fed-mgr-dashboard-net:
+
+volumes:
+  db-data:
+  db-auth:
+  kafka-broker-data:
+  kafka-ui-data:
+  rally-environments:
+  rally-args:
+  rally-reports:
