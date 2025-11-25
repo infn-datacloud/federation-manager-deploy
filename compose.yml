@@ -105,6 +105,8 @@ services:
         condition: service_started
       kafka-broker:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       DB_SCHEME: mysql+pymysql
       DB_USER: fed-mgr
@@ -142,6 +144,8 @@ services:
         condition: service_healthy
       kafka-broker:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       FED_MGR_API_URL: http://fed-mgr/api/v1/
       X_API_KEY: changeit
