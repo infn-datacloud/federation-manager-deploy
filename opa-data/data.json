@@ -1,0 +1,57 @@
+{
+  "site_admin_entitlements": ["admins"],
+  "site_tester_entitlements": ["admins/beta-testers"],
+  "user_group_mgr_entitlements": ["fed-mgr/user_group_mgr"],
+  "sla_mod_entitlements": ["users/sla", "users/catchall"],
+  "admin_entitlements": ["admins"],
+  "trusted_issuers": [
+    {
+      "endpoint": "https://iam.cloud.infn.it/",
+      "claim": "groups"
+    },
+    {
+      "endpoint": "https://iam.icsc.cloud.infn.it/",
+      "claim": "groups"
+    }
+  ],
+  "site_admin_endpoints": [
+    {
+      "path": "/api/v1/users/",
+      "method": "GET"
+    },
+    {
+      "path": "/api/v1/idps/",
+      "method": "GET"
+    }
+  ],
+  "site_tester_endpoints": [
+    {
+      "path": "/api/v1/users/",
+      "method": "GET"
+    },
+    {
+      "path": "/api/v1/idps/",
+      "method": "GET"
+    }
+  ],
+  "user_group_mgr_endpoints": [
+    {
+      "path": "/api/v1/users/",
+      "method": "GET"
+    },
+    {
+      "path": "/api/v1/idps/",
+      "method": "GET"
+    }
+  ],
+  "sla_mod_endpoints": [
+    {
+      "path": "/api/v1/users/",
+      "method": "GET"
+    },
+    {
+      "path": "/api/v1/idps/",
+      "method": "GET"
+    }
+  ]
+}
