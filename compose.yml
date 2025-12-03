@@ -103,7 +103,7 @@ services:
       OPA_AUTHZ_URL: http://opa:8181/v1/data/fed_mgr
       KAFKA_ENABLE: true
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
-      KAFKA_TOPIC: fed-mgr-rally
+      KAFKA_EVALUATE_PROVIDERS_TOPIC: ${FM_KAFKA_TOPIC}
       API_KEY: changeit
       LOCAL_ENCRYPTION: false
     healthcheck:
@@ -124,11 +124,11 @@ services:
     env_file:
       - .env
     environment:
-      FED_MGR_API_URL: http://fed-mgr/api/v1/
+      FED_MGR_API_URL: http://backend/api/v1/
       X_API_KEY: changeit
       KAFKA_ENABLE: true
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
-      KAFKA_TOPIC: fed-mgr-rally
+      KAFKA_TOPIC: ${FM_KAFKA_TOPIC}
       RALLY_ENV_FOLDER: /app/environments
       RALLY_ARGS_FOLDER: /app/args
       RALLY_REPORT_FOLDER: /app/reports
